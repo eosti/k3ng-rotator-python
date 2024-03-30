@@ -7,8 +7,8 @@ from k3ng import K3NGService
 
 
 def do_daemon(ser_port: str, rpc_port: int) -> None:
-    t = ThreadedServer(K3NGService(ser_port), rpc_port)
-    t.start
+    t = ThreadedServer(K3NGService(ser_port), port=rpc_port)
+    t.start()
 
 
 if __name__ == "__main__":

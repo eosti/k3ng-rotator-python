@@ -16,6 +16,15 @@ SEND_DELAY = 0.03
 RECV_DELAY = 0.03
 
 
+def exposify(cls):
+    """Decorator to append `exposed_` for all public members of a class"""
+    for key in dir(cls):
+        val = getattr(cls, key)
+        if callable(val) and not key.startswith("_"):
+            setattr(cls, "exposed_%s" % (key,), val)
+    return cls
+
+
 @dataclass
 class TLE:
     title: str
@@ -392,8 +401,13 @@ class K3NG:
         self.get_tracking_status()
 
 
+@exposify
+class exposedK3NG(K3NG):
+    pass
+
+
 class K3NGService(rpyc.Service):
     DEFAULT_PORT = 18866
 
     def __init__(self, ser_port: str) -> None:
-        self.exposed_K3NG = K3NG(ser_port)
+        self.exposed_K3NG = exposedK3NG(ser_port)
