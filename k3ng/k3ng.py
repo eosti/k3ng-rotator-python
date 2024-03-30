@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+import rpyc
 import serial
 
 SEND_DELAY = 0.03
@@ -55,6 +56,7 @@ class Satellite:
 
 
 class K3NG:
+    # TODO: add pass_active check
     def __init__(self, ser_port: str) -> None:
         # Ensure we have r/w
         self.port = Path(ser_port)
@@ -388,3 +390,10 @@ class K3NG:
         self.select_satellite(sat)
         self.enable_tracking()
         self.get_tracking_status()
+
+
+class K3NGService(rpyc.Service):
+    DEFAULT_PORT = 18866
+
+    def __init__(self, ser_port: str) -> None:
+        self.exposed_K3NG = K3NG(ser_port)

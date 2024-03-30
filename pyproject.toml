@@ -8,6 +8,7 @@ authors = ["Reid Sox-Harris <reid@soxharris.com>"]
 python = "^3.9"
 pyserial = "^3.5"
 requests = "^2.31.0"
+rpyc = "^6.0.0"
 
 [tool.poetry.group.dev]
 optional = true
