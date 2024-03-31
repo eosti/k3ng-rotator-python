@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-import rpyc
+import rpyc  # type: ignore
 import serial
 
 SEND_DELAY = 0.03

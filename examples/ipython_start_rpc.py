@@ -1,8 +1,8 @@
 import logging
 from argparse import ArgumentParser
 
+import rpyc  # type: ignore
 from IPython import get_ipython
-import rpyc
 
 from k3ng import K3NGService
 
@@ -23,8 +23,7 @@ logging.basicConfig(level=logging.INFO)
 args = parser.parse_args()
 
 
-rpc_conn = rpyc.connect("localhost", args.rpc_port)
-rot = rpc_conn.root.K3NG
+rot = rpyc.connect("localhost", args.rpc_port).root.K3NG
 
 try:
     ipython = get_ipython()
