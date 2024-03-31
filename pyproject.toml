@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "k3ng"
-version = "1.0.0"
+version = "1.1.0"
 description = "Control a K3NG rotator over serial"
 authors = ["Reid Sox-Harris <reid@soxharris.com>"]
 

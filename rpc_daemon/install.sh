@@ -20,3 +20,4 @@ sudo systemctl daemon-reload
 sudo systemctl enable k3ng_rotator 
 sudo systemctl restart k3ng_rotator 
 
+printf "\nService installed!\n"
