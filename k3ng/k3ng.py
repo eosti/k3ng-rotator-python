@@ -411,3 +411,4 @@ class K3NGService(rpyc.Service):
 
     def __init__(self, ser_port: str) -> None:
         self.exposed_K3NG = exposedK3NG(ser_port)
+        self.exposed_K3NG.set_time()

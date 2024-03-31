@@ -42,6 +42,7 @@ rot = rpyc.connect("localhost", args.rpc_port).root.K3NG
 
 Once initialized in this way, the K3NG object is exactly the same as if it was running locally, but `rpyc` will be handling back-and-forth behind the scenes. 
 Pretty neat!
+(ok, not exactly the same, for example tab completion doesn't work quite right currently...)
 
 Again, for development, it is useful to use `ipython`, and in `/examples` there is another helper script for RPC environments: `ipython3 -i ipython_start_rpc.py`
 
