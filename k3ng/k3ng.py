@@ -14,7 +14,7 @@ import rpyc  # type: ignore
 import serial
 
 SEND_DELAY = 0.03
-RECV_DELAY = 0.03
+RECV_DELAY = 0.00
 
 
 def exposify(cls):
