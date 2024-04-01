@@ -31,5 +31,5 @@ if __name__ == "__main__":
     print(
         f"rotator_tracking satname={state.satname},sat_state={state.sat_state.name},"
         f"next_event={state.next_event.name},next_event_mins={state.next_event_mins}"
-        f"{state.is_tracking}"
+        f" {int(state.is_tracking)}"
     )
