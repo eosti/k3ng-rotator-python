@@ -87,9 +87,9 @@ class PassInfo:
         los_date = datetime.datetime.strptime(
             splitstr[4][4:] + " " + splitstr[5], "%Y-%m-%d %H:%M:%S"
         )
-        aos_az = int(splitstr[3][4:])
-        los_az = int(splitstr[6][4:])
-        max_el = int(splitstr[8][4:])
+        aos_az = int(splitstr[3][3:])
+        los_az = int(splitstr[6][3:])
+        max_el = int(splitstr[8][3:])
 
         return cls(aos_date, aos_az, los_date, los_az, max_el)
 
@@ -131,17 +131,19 @@ class TrackingStatus:
         [AOS | LOS] in XhXm
         """
 
-        sat = statestr[0][11:]
+        sat = statestr[0][10:]
         satinfo = statestr[1].split()
-        cur_az = int(satinfo[0][4:])
-        cur_el = int(satinfo[1][4:])
-        cur_lat = float(satinfo[2][5:])
-        cur_long = float(satinfo[3][6:])
+        cur_az = int(satinfo[0][3:])
+        cur_el = int(satinfo[1][3:])
+        cur_lat = float(satinfo[2][4:])
+        cur_long = float(satinfo[3][5:])
         sat_state = SignalState.from_str(satinfo[4])
         is_tracking = True if satinfo[5] == "TRACKING_ACTIVE" else False
         next_pass = PassInfo.from_status(statestr[2])
-        next_event = SignalState.from_str(statestr[3][0])
-        timestring = statestr[3][2].replace("~", "")
+
+        next_event_str = statestr[3].split()
+        next_event = SignalState.from_str(next_event_str[0])
+        timestring = next_event_str[2].replace("~", "")
         if "h" not in timestring:
             mins = int(timestring[:-1])
         else:
