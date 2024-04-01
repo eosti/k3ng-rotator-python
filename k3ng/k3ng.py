@@ -5,8 +5,9 @@ import re
 import sys
 import time
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import requests
 import rpyc  # type: ignore
@@ -62,6 +63,103 @@ class Satellite:
         logging.info(f"Retrieved TLE for NORAD ID {self.id}: {self.tle}")
 
         return self.tle
+
+
+@dataclass
+class PassInfo:
+    start_time: datetime.datetime
+    start_az: int
+    end_time: datetime.datetime
+    end_az: int
+    max_el: int
+
+    @classmethod
+    def from_status(cls, statestr: str):
+        """
+        Expected format:
+        Next AOS:YYYY-MM-DD HH:MM:SS Az:XX LOS:YYYY-MM-DD HH:MM:SS Az:XX Max El:XX
+        """
+
+        splitstr = statestr.split()
+        aos_date = datetime.datetime.strptime(
+            splitstr[1][4:] + " " + splitstr[2], "%Y-%m-%d %H:%M:%S"
+        )
+        los_date = datetime.datetime.strptime(
+            splitstr[4][4:] + " " + splitstr[5], "%Y-%m-%d %H:%M:%S"
+        )
+        aos_az = int(splitstr[3][4:])
+        los_az = int(splitstr[6][4:])
+        max_el = int(splitstr[8][4:])
+
+        return cls(aos_date, aos_az, los_date, los_az, max_el)
+
+
+class SignalState(IntEnum):
+    LOS = 0
+    AOS = 1
+
+    @classmethod
+    def from_str(cls, text: str):
+        if text.upper() == "LOS":
+            return cls.LOS
+        elif text.upper() == "AOS":
+            return cls.AOS
+        else:
+            raise ValueError(f"State {text} is not in [AOS | LOS]")
+
+
+@dataclass
+class TrackingStatus:
+    satname: str
+    cur_az: float
+    cur_el: float
+    cur_lat: float
+    cur_long: float
+    sat_state: SignalState
+    is_tracking: bool
+    next_pass: PassInfo
+    next_event: SignalState
+    next_event_mins: int
+
+    @classmethod
+    def from_str(cls, statestr: List[str]):
+        """
+        Expected format:
+        Satellite:XXXXXX
+        AZ:XX EL:XX Lat:XX.XX Long:XX.XX [LOS | AOS] TRACKING_[IN | ]ACTIVE
+        [see PassInfo.from_status]
+        [AOS | LOS] in XhXm
+        """
+
+        sat = statestr[0][11:]
+        satinfo = statestr[1].split()
+        cur_az = int(satinfo[0][4:])
+        cur_el = int(satinfo[1][4:])
+        cur_lat = float(satinfo[2][5:])
+        cur_long = float(satinfo[3][6:])
+        sat_state = SignalState.from_str(satinfo[4])
+        is_tracking = True if satinfo[5] == "TRACKING_ACTIVE" else False
+        next_pass = PassInfo.from_status(statestr[2])
+        next_event = SignalState.from_str(statestr[3][0])
+        timestring = statestr[3][2].replace("~", "")
+        if "h" not in timestring:
+            mins = int(timestring[:-1])
+        else:
+            splitdur = timestring.split("h")
+            mins = int(splitdur[0]) * 60 + int(splitdur[1][:-1])
+
+        return cls(
+            sat,
+            cur_az,
+            cur_el,
+            cur_lat,
+            cur_long,
+            sat_state,
+            is_tracking,
+            next_pass,
+            next_event,
+            mins,
+        )
 
 
 class K3NG:
@@ -367,11 +465,13 @@ class K3NG:
 
     def get_trackable(self) -> list[str]:
         ret = self.query("\\|")
+        for i in range(len(ret)):
+            ret[i] = ret[i].replace("\t", "    ")
         return ret
 
-    def get_tracking_status(self) -> list[str]:
+    def get_tracking_status(self) -> TrackingStatus:
         ret = self.query("\\~")
-        return ret
+        return TrackingStatus.from_str(ret)
 
     def select_satellite(self, sat: Satellite) -> None:
         ret = self.query("\\$" + sat.tle.title[0:5])
@@ -379,8 +479,8 @@ class K3NG:
         if "Loading" not in ret[1]:
             raise RuntimeError("Unable to select satellite")
 
-    def get_next_pass(self, satellite) -> list[str]:
-        return self.query(f"\\%{satellite.name[0:6]}")
+    def get_next_pass(self, sat: Satellite) -> list[str]:
+        return self.query(f"\\%{sat.tle.title[0:6]}")
 
     def enable_tracking(self) -> None:
         self.query("\\^1")

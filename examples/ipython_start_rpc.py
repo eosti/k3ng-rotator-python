@@ -23,7 +23,9 @@ logging.basicConfig(level=logging.INFO)
 args = parser.parse_args()
 
 
-rot = rpyc.connect("localhost", args.rpc_port).root.K3NG
+rot = rpyc.connect(
+    "localhost", args.rpc_port, config={"allow_public_attrs": True}
+).root.K3NG
 
 try:
     ipython = get_ipython()
