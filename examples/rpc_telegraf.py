@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import time
 
 import rpyc  # type: ignore
 
@@ -26,10 +27,17 @@ if __name__ == "__main__":
     state = rot.get_tracking_status()
 
     # Format for Telegraf usage
-    print(f"rotator_azimuth {az}")
-    print(f"rotator_elevation {el}")
-    print(
-        f"rotator_tracking satname={state.satname},sat_state={state.sat_state.name},"
-        f"next_event={state.next_event.name},next_event_mins={state.next_event_mins}"
-        f" {int(state.is_tracking)}"
-    )
+    # Measurement
+    measurement = "rotator,"
+    # Tags
+    measurement += f"satname={state.satname},sat_state={state.sat_state.name},"
+    measurement += f"next_event={state.next_event.name} "
+    # Fields
+    measurement += f"next_event_mins={state.next_event_mins},"
+    measurement += f"azimuth={az},"
+    measurement += f"elevation={el},"
+    measurement += f"is_tracking={int(state.is_tracking)} "
+    # Timestamp
+    measurement += time.time_ns()
+
+    print(measurement)
