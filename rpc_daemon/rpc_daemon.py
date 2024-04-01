@@ -17,9 +17,13 @@ def graceful_exit(signum, stack):
 
 def do_daemon(ser_port: str, rpc_port: int) -> None:
     # TODO: make this more secure!
-    t = ThreadedServer(K3NGService(ser_port), port=rpc_port, protocol_config={
-        'allow_public_attrs': True,
-    })
+    t = ThreadedServer(
+        K3NGService(ser_port),
+        port=rpc_port,
+        protocol_config={
+            "allow_public_attrs": True,
+        },
+    )
     systemd.daemon.notify("READY=1")
     t.start()
 

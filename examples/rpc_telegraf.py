@@ -1,4 +1,3 @@
-import logging
 from argparse import ArgumentParser
 
 import rpyc  # type: ignore
@@ -24,3 +23,13 @@ if __name__ == "__main__":
 
     az = rot.get_azimuth()
     el = rot.get_elevation()
+    state = rot.get_tracking_status()
+
+    # Format for Telegraf usage
+    print(f"rotator_azimuth {az}")
+    print(f"rotator_elevation {el}")
+    print(
+        f"rotator_tracking satname={state.satname},sat_state={state.sat_state.name},"
+        f"next_event={state.next_event.name},next_event_mins={state.next_event_mins}"
+        f"{state.is_tracking}"
+    )
