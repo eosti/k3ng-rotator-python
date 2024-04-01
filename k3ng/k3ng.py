@@ -111,12 +111,12 @@ class SignalState(IntEnum):
 @dataclass
 class TrackingStatus:
     satname: str
+    sat_state: SignalState
+    is_tracking: bool
     cur_az: float
     cur_el: float
     cur_lat: float
     cur_long: float
-    sat_state: SignalState
-    is_tracking: bool
     next_pass: PassInfo
     next_event: SignalState
     next_event_mins: int
@@ -151,16 +151,16 @@ class TrackingStatus:
             mins = int(splitdur[0]) * 60 + int(splitdur[1][:-1])
 
         return cls(
-            sat,
-            cur_az,
-            cur_el,
-            cur_lat,
-            cur_long,
-            sat_state,
-            is_tracking,
-            next_pass,
-            next_event,
-            mins,
+            satname=sat,
+            cur_az=cur_az,
+            cur_el=cur_el,
+            cur_lat=cur_lat,
+            cur_long=cur_long,
+            sat_state=sat_state,
+            is_tracking=is_tracking,
+            next_pass=next_pass,
+            next_event=next_event,
+            next_event_mins=mins,
         )
 
 
