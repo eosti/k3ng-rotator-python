@@ -485,12 +485,16 @@ class K3NG:
         return self.query(f"\\%{sat.tle.title[0:6]}")
 
     def enable_tracking(self) -> None:
-        self.query("\\^1")
-        # you get the idea
+        ret = self.query("\\^1")
+        if ret[0] != "Satellite tracking activated.":
+            logging.error(ret)
+            raise RuntimeError("Tracking not enabled")
 
     def disable_tracking(self) -> None:
-        self.query("\\^0")
-        # samesies
+        ret = self.query("\\^0")
+        if ret[0] != "Satellite tracking deactivated.":
+            logging.error(ret)
+            raise RuntimeError("Tracking not disabled")
 
     def load_and_track(self, sat_id: int) -> None:
         """Helper to load and begin tracking a satellite"""
@@ -502,11 +506,19 @@ class K3NG:
         self.enable_tracking()
         self.get_tracking_status()
 
-    def get_raw_analog(self, pin: int) -> float:
+    def get_raw_analog(self, pin: int) -> int:
+        """Returns the raw ADC reading of a valid analog pin"""
         if pin < 0 or pin > 5:
             raise ValueError("Invalid pin number")
 
-        return self.query_extended(f"AR0{pin}")
+        retval = self.query_extended(f"AR{pin:02}")
+
+        # Return value is 0{pin}XXXX where XXXX=VAL
+        return int(retval[2:])
+
+    def get_raw_voltage(self, pin: int, vref: float = 5.0, numbits: int = 10) -> float:
+        """Returns the raw voltage of a valid analog pin"""
+        return self.get_raw_analog(pin) * vref / numbits
 
 
 @exposify
