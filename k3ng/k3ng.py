@@ -502,6 +502,12 @@ class K3NG:
         self.enable_tracking()
         self.get_tracking_status()
 
+    def get_raw_analog(self, pin: int) -> float:
+        if pin < 0 or pin > 5:
+            raise ValueError("Invalid pin number")
+
+        return self.query_extended(f"AR0{pin}")
+
 
 @exposify
 class exposedK3NG(K3NG):
