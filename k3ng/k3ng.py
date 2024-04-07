@@ -518,7 +518,7 @@ class K3NG:
 
     def get_raw_voltage(self, pin: int, vref: float = 5.0, numbits: int = 10) -> float:
         """Returns the raw voltage of a valid analog pin"""
-        return self.get_raw_analog(pin) * vref / numbits
+        return self.get_raw_analog(pin) * vref / (2**numbits)
 
 
 @exposify
