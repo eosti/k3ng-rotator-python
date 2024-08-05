@@ -46,15 +46,9 @@ class Satellite:
             self.tle = tle
 
     def retrieve_tle(self) -> TLE:
-        params = {"format": "json", "norad_cat_id": str(self.id)}
-        resp = requests.get("https://db.satnogs.org/api/tle/", params=params).json()
-
-        # Some TLE titles start with "0 " (i.e. "0 ISS") and others don't ("ISS")
-        # We opt to be consistent and NOT start with "0 ".
-        if resp[0]["tle0"][0:2] == "0 ":
-            self.tle = TLE(resp[0]["tle0"][2:], resp[0]["tle1"], resp[0]["tle2"])
-        else:
-            self.tle = TLE(resp[0]["tle0"], resp[0]["tle1"], resp[0]["tle2"])
+        tle_txt = requests.get("https://celestrak.org/NORAD/elements/gp.php?CATNR="+str(self.id)).text
+        tle_txt = [line.strip() for line in tle_txt.splitlines()]
+        self.tle = TLE(tle_txt[0], tle_txt[1], tle_txt[2])
 
         # K3NG doesn't like special characters or spaces
         self.tle.title = re.sub("[^A-Za-z0-9 ]+", "", self.tle.title)
