@@ -1,5 +1,5 @@
-from argparse import ArgumentParser
 import time
+from argparse import ArgumentParser
 
 import rpyc  # type: ignore
 
@@ -38,6 +38,6 @@ if __name__ == "__main__":
     measurement += f"elevation={el},"
     measurement += f"is_tracking={int(state.is_tracking)} "
     # Timestamp
-    measurement += time.time_ns()
+    measurement += str(time.time_ns())
 
     print(measurement)

@@ -9,6 +9,8 @@ For most stuff, this is all you need.
 
 If, for whatever reason, you need this available globally, you *can* run `pip3 install . --break-system-packages`, but this carries risks as the command implies. 
 
+To install development dependencies, use `poetry install --with=dev`
+
 ## Usage
 See `/examples` for various ways to control the rotator. 
 It may be useful to use `udev` rules to always map the Arduino connected to the rotator to a more meaningful serial devices (such as `/dev/ttyRotator`), especially if you have multiple serial devices which can change designators across boot. 

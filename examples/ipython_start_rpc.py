@@ -2,7 +2,7 @@ import logging
 from argparse import ArgumentParser
 
 import rpyc  # type: ignore
-from IPython import get_ipython
+from IPython import get_ipython  # type: ignore
 
 from k3ng import K3NGService
 

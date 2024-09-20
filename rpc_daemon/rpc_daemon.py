@@ -8,10 +8,12 @@ from rpyc.utils.server import ThreadedServer  # type: ignore
 
 from k3ng import K3NGService
 
+logger = logging.getLogger(__name__)
 
-def graceful_exit(signum, stack):
+
+def graceful_exit(signum, _):
     systemd.daemon.notify("STOPPING=1")
-    logging.info(f"Recieved signal {signal.Signals(signum).name}, stopping!")
+    logger.info("Received signal %s, stopping!", signal.Signals(signum).name)
     sys.exit(0)
 
 
@@ -30,6 +32,7 @@ def do_daemon(ser_port: str, rpc_port: int) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("rpyc").setLevel(logging.WARNING)
     signal.signal(signal.SIGINT, graceful_exit)
     signal.signal(signal.SIGTERM, graceful_exit)
 
