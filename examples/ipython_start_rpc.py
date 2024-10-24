@@ -25,7 +25,7 @@ args = parser.parse_args()
 
 rot = rpyc.connect(
     "localhost", args.rpc_port, config={"allow_public_attrs": True}
-).root.K3NG
+).root.k3ng
 
 try:
     ipython = get_ipython()

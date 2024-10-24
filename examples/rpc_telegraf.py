@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    rot = rpyc.connect("localhost", args.rpc_port).root.K3NG
+    rot = rpyc.connect("localhost", args.rpc_port).root.k3ng
 
     az = rot.get_azimuth()
     el = rot.get_elevation()
