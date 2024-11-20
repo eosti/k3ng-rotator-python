@@ -26,14 +26,13 @@ def exposify(cls):
     for key in dir(cls):
         val = getattr(cls, key)
         if callable(val) and not key.startswith("_"):
+            # pylint: disable-next=consider-using-f-string
             setattr(cls, "exposed_%s" % (key,), val)
     return cls
 
 
 class K3NGException(Exception):
     """General K3NG exception class"""
-
-    pass
 
 
 class K3NGValueException(Exception):
@@ -511,7 +510,7 @@ class K3NG:
         return (int(ret_split[2]), int(ret_split[4]))
 
     def load_tle(self, sat: Satellite) -> None:
-        """Load a TLE into the K3NG rotator controller"""
+        """Load a TLE from internet into the K3NG rotator controller"""
         self.write("\\#")
         time.sleep(0.5)
         self.write(sat.tle.title)
@@ -535,7 +534,8 @@ class K3NG:
             raise K3NGException("TLE not loaded")
 
     def load_tle_from_file(self, tle_file: str) -> Satellite:
-        with open(tle_file, "r") as file:
+        """Load a TLE from a file into K3NG rotator controller"""
+        with open(tle_file, "r", encoding="utf8") as file:
             tle_file_data = file.readlines()
 
         sat_tle = TLE(tle_file_data[0], tle_file_data[1], tle_file_data[2])
