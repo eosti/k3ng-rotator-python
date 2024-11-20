@@ -561,6 +561,8 @@ class K3NG:
     def get_tracking_status(self) -> TrackingStatus:
         """Get the state of the K3NG tracking"""
         ret = self.query("\\~")
+        if len(ret) == 0:
+            raise RuntimeError("Unable to get state")
         return TrackingStatus.from_str(ret)
 
     def select_satellite(self, sat: Satellite) -> None:
