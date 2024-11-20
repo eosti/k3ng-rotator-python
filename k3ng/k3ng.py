@@ -30,6 +30,16 @@ def exposify(cls):
     return cls
 
 
+class K3NGException(Exception):
+    """General K3NG exception class"""
+
+    pass
+
+
+class K3NGValueException(Exception):
+    """Exception to catch value validation exceptions"""
+
+
 @dataclass
 class TLE:
     """Stores a Three-Line Element"""
@@ -74,7 +84,9 @@ class Satellite:
             resp_sat = requests.get(
                 "https://db.satnogs.org/api/tle/", params=params, timeout=5
             ).json()
-            self.tle = TLE(resp_sat[0]["tle0"], resp_sat[0]["tle1"], resp_sat[0]["tle2"])
+            self.tle = TLE(
+                resp_sat[0]["tle0"], resp_sat[0]["tle1"], resp_sat[0]["tle2"]
+            )
 
         # Some TLE titles start with "0 " (i.e. "0 ISS") and others don't ("ISS")
         # We opt to be consistent and NOT start with "0 ".
@@ -136,7 +148,7 @@ class SignalState(IntEnum):
         if text.upper() == "AOS":
             return cls.AOS
 
-        raise ValueError(f"State {text} is not in [AOS | LOS]")
+        raise K3NGValueException(f"State {text} is not in [AOS | LOS]")
 
 
 @dataclass
@@ -231,7 +243,7 @@ class K3NG:
         # IDK why it's needed but the extended commands won't work otherwise
         ret = self.query("\\-")
         if not ret:
-            raise RuntimeError("Unable to communicate with rotator")
+            raise K3NGException("Unable to communicate with rotator")
 
     #  ╭──────────────────────────────────────────────────────────╮
     #  │                     General Commands                     │
@@ -279,7 +291,7 @@ class K3NG:
         """Send an extended command and parse the response"""
         time.sleep(0.2)
         if len(cmd) < 2 or "\\?" in cmd:
-            raise ValueError("Invalid extended command")
+            raise K3NGValueException("Invalid extended command")
 
         self.write("\\?" + cmd)
 
@@ -288,14 +300,14 @@ class K3NG:
         try:
             resp = self.read()[0]
         except IndexError as ex:
-            raise RuntimeError("No response from rotator") from ex
+            raise K3NGException("No response from rotator") from ex
 
         status = resp[0:5]
         if "\\!??" in status:
-            raise RuntimeError(f"Response error: {resp}")
+            raise K3NGException(f"Response error: {resp}")
 
         if "OK" not in status:
-            raise RuntimeError(f"Invalid response: {resp}")
+            raise K3NGException(f"Invalid response: {resp}")
 
         return resp[6:]
 
@@ -328,14 +340,14 @@ class K3NG:
             logger.debug("Setting to current UTC time: %s", current_time)
 
         if len(in_time) != 14:
-            raise ValueError("Invalid time length")
+            raise K3NGValueException("Invalid time length")
 
         ret = self.query("\\O" + in_time)
         ret_split = " ".join(ret[0].split(" ")[3:5])
         ret_time = datetime.datetime.fromisoformat(ret_split)
 
         if abs(ret_time - current_time) > datetime.timedelta(seconds=10):
-            raise ValueError("Time did not save!")
+            raise K3NGException("Time did not save!")
 
         self.check_time()
 
@@ -355,7 +367,7 @@ class K3NG:
     def set_loc(self, loc) -> None:
         """Set the location of the K3NG in maidenhead coordinates"""
         if len(loc) != 6:
-            raise ValueError("Invalid location length")
+            raise K3NGValueException("Invalid location length")
 
         self.query("\\G" + loc)
 
@@ -456,7 +468,7 @@ class K3NG:
         """Command the rotator to the parked location"""
         ret = self.query("\\P")
         if "Parking" not in ret[0]:
-            raise RuntimeError("Not parking")
+            raise K3NGException("Not parking")
 
     def get_autopark(self) -> int:
         """Determine if the rotator is in autopark or not"""
@@ -476,21 +488,21 @@ class K3NG:
         if duration == 0:
             ret = self.query("\\Y0")
             if "off" not in ret[0]:
-                raise RuntimeError(f"Autopark not set ({ret[0]})")
+                raise K3NGException(f"Autopark not set ({ret[0]})")
         else:
             ret = self.query(f"\\Y {duration:04d}")
             if f"{duration} minute" not in ret[0]:
-                raise RuntimeError(f"Autopark not set ({ret[0]})")
+                raise K3NGException(f"Autopark not set ({ret[0]})")
 
     def set_park_location(self, az: int, el: int) -> None:
         """Set the park location to the current location"""
         ret = self.query(f"\\PA{az:03}")
         if str(az) not in ret[0]:
-            raise RuntimeError("Azimuth park not set")
+            raise K3NGException("Azimuth park not set")
 
         ret = self.query(f"\\PE{el:03}")
         if str(el) not in ret[0]:
-            raise RuntimeError("Elevation park not set")
+            raise K3NGException("Elevation park not set")
 
     def get_park_location(self) -> tuple[int, int]:
         """Set the park location to the current location"""
@@ -512,15 +524,15 @@ class K3NG:
         if "corrupt" in ret[0]:
             logger.critical("TLE corrupted on write")
             logger.info(ret)
-            raise RuntimeError("TLE corrupted")
+            raise K3NGException("TLE corrupted")
         if "truncated" in ret[0]:
             logger.critical("File was truncated due to lack of EEPROM storage.")
             logger.info(ret)
-            raise RuntimeError("TLE truncated")
+            raise K3NGException("TLE truncated")
         if sat.tle.title not in ret[1]:
             logger.critical("TLE not loaded")
             logger.info(ret)
-            raise RuntimeError("TLE not loaded")
+            raise K3NGException("TLE not loaded")
 
     def load_tle_from_file(self, tle_file: str) -> Satellite:
         with open(tle_file, "r") as file:
@@ -549,7 +561,7 @@ class K3NG:
         """Clear the TLEs stored to the K3NG"""
         ret = self.query("\\!")
         if "Erased the TLE file area" not in ret[0]:
-            raise RuntimeError("Failed to clear TLEs")
+            raise K3NGException("Failed to clear TLEs")
 
     def get_trackable(self) -> list[str]:
         """Get a list of trackable satellites"""
@@ -562,7 +574,7 @@ class K3NG:
         """Get the state of the K3NG tracking"""
         ret = self.query("\\~")
         if len(ret) == 0:
-            raise RuntimeError("Unable to get state")
+            raise K3NGException("Unable to get state")
         return TrackingStatus.from_str(ret)
 
     def select_satellite(self, sat: Satellite) -> None:
@@ -570,7 +582,7 @@ class K3NG:
         ret = self.query("\\$" + sat.tle.title[0:5])
 
         if "Loading" not in ret[1]:
-            raise RuntimeError("Unable to select satellite")
+            raise K3NGException("Unable to select satellite")
 
     def get_next_pass(self, sat: Satellite) -> list[str]:
         """Get the next calculated pass"""
@@ -581,14 +593,14 @@ class K3NG:
         ret = self.query("\\^1")
         if ret[0] != "Satellite tracking activated.":
             logger.error(ret)
-            raise RuntimeError("Tracking not enabled")
+            raise K3NGException("Tracking not enabled")
 
     def disable_tracking(self) -> None:
         """Disable tracking of the seelected satellite"""
         ret = self.query("\\^0")
         if ret[0] != "Satellite tracking deactivated.":
             logger.error(ret)
-            raise RuntimeError("Tracking not disabled")
+            raise K3NGException("Tracking not disabled")
 
     def load_and_track(self, sat_id: int) -> None:
         """Helper to load and begin tracking a satellite"""
@@ -603,7 +615,7 @@ class K3NG:
     def get_raw_analog(self, pin: int) -> int:
         """Returns the raw ADC reading of a valid analog pin"""
         if pin < 0 or pin > 5:
-            raise ValueError("Invalid pin number")
+            raise K3NGValueException("Invalid pin number")
 
         retval = self.query_extended(f"AR{pin:02}")
 
