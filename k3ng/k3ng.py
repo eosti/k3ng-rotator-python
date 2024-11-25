@@ -119,12 +119,17 @@ class PassInfo:
         """
 
         splitstr = statestr.split()
-        aos_date = datetime.datetime.strptime(
-            splitstr[1][4:] + " " + splitstr[2], "%Y-%m-%d %H:%M:%S"
-        )
-        los_date = datetime.datetime.strptime(
-            splitstr[4][4:] + " " + splitstr[5], "%Y-%m-%d %H:%M:%S"
-        )
+        try:
+            aos_date = datetime.datetime.strptime(
+                splitstr[1][4:] + " " + splitstr[2], "%Y-%m-%d %H:%M:%S"
+            )
+            los_date = datetime.datetime.strptime(
+                splitstr[4][4:] + " " + splitstr[5], "%Y-%m-%d %H:%M:%S"
+            )
+        except ValueError as e:
+            logger.warning("Unable to parse PassInfo: %s", statestr)
+            raise e
+
         aos_az = int(splitstr[3][3:])
         los_az = int(splitstr[6][3:])
         max_el = int(splitstr[8][3:])
@@ -185,7 +190,12 @@ class TrackingStatus:
         cur_long = float(satinfo[3][5:])
         sat_state = SignalState.from_str(satinfo[4])
         is_tracking = satinfo[5] == "TRACKING_ACTIVE"
-        next_pass = PassInfo.from_status(statestr[2])
+
+        try:
+            next_pass = PassInfo.from_status(statestr[2])
+        except ValueError as e:
+            logger.warning("Unable to parse TrackingStatus: %s", statestr)
+            raise K3NGException("TrackingStatus parsing error") from e
 
         next_event_str = statestr[3].split()
         next_event = SignalState.from_str(next_event_str[0])
