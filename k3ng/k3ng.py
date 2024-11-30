@@ -167,7 +167,7 @@ class TrackingStatus:
     cur_el: float
     cur_lat: float
     cur_long: float
-    next_pass: PassInfo
+    next_pass: Optional[PassInfo]
     next_event: SignalState
     next_event_mins: int
 
@@ -193,9 +193,12 @@ class TrackingStatus:
 
         try:
             next_pass = PassInfo.from_status(statestr[2])
-        except ValueError as e:
-            logger.warning("Unable to parse TrackingStatus: %s", statestr)
-            raise K3NGException("TrackingStatus parsing error") from e
+        except ValueError:
+            # This is not an exception because sometimes K3NG gets confused.
+            # If next_pass matters, you should verify that it's not None.
+            logger.warning("Unable to parse next pass info in tracking status")
+            logger.info("Consider manually recalculating the satellite tracking.")
+            next_pass = None
 
         next_event_str = statestr[3].split()
         next_event = SignalState.from_str(next_event_str[0])
@@ -584,7 +587,7 @@ class K3NG:
         """Get the state of the K3NG tracking"""
         ret = self.query("\\~")
         if len(ret) == 0:
-            raise K3NGException("Unable to get state")
+            raise K3NGException("Unable to get state (no state returned)")
         return TrackingStatus.from_str(ret)
 
     def select_satellite(self, sat: Satellite) -> None:
@@ -606,11 +609,18 @@ class K3NG:
             raise K3NGException("Tracking not enabled")
 
     def disable_tracking(self) -> None:
-        """Disable tracking of the seelected satellite"""
+        """Disable tracking of the selected satellite"""
         ret = self.query("\\^0")
         if ret[0] != "Satellite tracking deactivated.":
             logger.error(ret)
             raise K3NGException("Tracking not disabled")
+
+    def recalculate(self) -> None:
+        """Recalculate satellite tracking and DISABLES TRACKING"""
+        ret = self.query("\\&")
+        if ret[0] != "Recalculating all satellites...":
+            logger.error(ret)
+            raise K3NGException("Was unable to recalculate satellites")
 
     def load_and_track(self, sat_id: int) -> None:
         """Helper to load and begin tracking a satellite"""
@@ -620,7 +630,11 @@ class K3NG:
         self.check_time()
         self.select_satellite(sat)
         self.enable_tracking()
-        self.get_tracking_status()
+
+        # Verify tracking enabled
+        status = self.get_tracking_status()
+        if not status.is_tracking:
+            raise K3NGException("Rotator is not tracking!")
 
     def get_raw_analog(self, pin: int) -> int:
         """Returns the raw ADC reading of a valid analog pin"""
