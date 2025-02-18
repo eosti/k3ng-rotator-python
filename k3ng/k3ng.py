@@ -15,9 +15,6 @@ import requests
 import rpyc  # type: ignore
 import serial
 
-SEND_DELAY = 0.03
-RECV_DELAY = 0.00
-
 logger = logging.getLogger(__name__)
 
 
@@ -178,7 +175,7 @@ class TrackingStatus:
         Satellite:XXXXXX
         AZ:XX EL:XX Lat:XX.XX Long:XX.XX [LOS | AOS] TRACKING_[IN | ]ACTIVE
         [see PassInfo.from_status]
-        [AOS | LOS] in XhXm
+        [AOS | LOS] in XdXhXm
         """
         # pylint: disable=too-many-locals
 
@@ -203,11 +200,7 @@ class TrackingStatus:
         next_event_str = statestr[3].split()
         next_event = SignalState.from_str(next_event_str[0])
         timestring = next_event_str[2].replace("~", "")
-        if "h" not in timestring:
-            mins = int(timestring[:-1])
-        else:
-            splitdur = timestring.split("h")
-            mins = int(splitdur[0]) * 60 + int(splitdur[1][:-1])
+        mins = cls.dhm_to_mins(timestring)
 
         return cls(
             satname=sat,
@@ -222,6 +215,22 @@ class TrackingStatus:
             next_event_mins=mins,
         )
 
+    @staticmethod
+    def dhm_to_mins(timestr: str) -> int:
+        """Converts a 'XdXhXm' time string to minutes"""
+        # Convert all seperators to a common seperator and then split
+        timestr_clean = timestr.replace("d", "!").replace("h", "!").replace("m", "!")
+        splitstr = timestr_clean.split("!")[:-1]  # Last entry is empty
+
+        if len(splitstr) == 1:
+            mins = int(splitstr[0])
+        elif len(splitstr) == 2:
+            mins = int(splitstr[0]) * 60 + int(splitstr[1])
+        else:
+            mins = int(splitstr[0]) * 60 * 24 + int(splitstr[1]) * 60 + int(splitstr[2])
+
+        return mins
+
 
 class K3NG:
     """Class for controlling K3NG over serial"""
@@ -229,8 +238,13 @@ class K3NG:
     # pylint: disable=too-many-public-methods
 
     # TODO: add pass_active check
-    def __init__(self, ser_port: str) -> None:
-        # Ensure we have r/w
+    def __init__(
+        self, ser_port: str, send_delay: float = 0.03, recv_delay: float = 0.00
+    ) -> None:
+        self.send_delay = send_delay
+        self.recv_delay = recv_delay
+
+        # Ensure we have r/w on device
         self.port = Path(ser_port)
         if not self.port.exists():
             raise FileNotFoundError(self.port)
@@ -262,12 +276,12 @@ class K3NG:
     #  ╰──────────────────────────────────────────────────────────╯
 
     def read(self) -> list[str]:
-        """Read all pending lines"""
+        """Read all pending lines in serial buffer"""
         response = []
         line = ""
 
         while self.ser.in_waiting > 0:
-            time.sleep(RECV_DELAY)
+            time.sleep(self.recv_delay)
             ch = self.ser.read()
             ch_decoded = ch.decode("utf-8")
             if ch_decoded in ("\r", "\n"):
@@ -284,11 +298,10 @@ class K3NG:
     def write(self, cmd: str) -> None:
         """Send a command"""
         logger.debug("TX: %s", cmd)
-        # TODO: does this actually do anything? I think we can just send the cmd
         for _ in cmd[0]:
-            time.sleep(SEND_DELAY)
+            time.sleep(self.send_delay)
             self.ser.write(cmd.encode())
-        time.sleep(SEND_DELAY)
+        time.sleep(self.send_delay)
         self.ser.write(("\r").encode())
         time.sleep(0.2)
         self.ser.readline()
@@ -339,12 +352,12 @@ class K3NG:
         return retval
 
     def get_time(self) -> datetime.datetime:
-        """Get the stored time on the K3NG"""
+        """Get the stored time on the rotator"""
         retval = self.query("\\C")
         return datetime.datetime.fromisoformat(retval[0])
 
     def set_time(self, in_time: Optional[str] = None) -> None:
-        """Set the time on the K3NG to the current UTC time"""
+        """Set the time on the rotator to the current UTC time"""
         if in_time is None:
             # Determine UTC time now
             current_time = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -372,12 +385,12 @@ class K3NG:
             logger.warning("Time difference greater than 10 seconds!")
 
     def get_loc(self) -> str:
-        """Get the stored location from the K3NG"""
+        """Get the stored location from the rotator"""
         # TODO: make this be able to return coords or grid
         return self.query_extended("RG")[0]
 
     def set_loc(self, loc) -> None:
-        """Set the location of the K3NG in maidenhead coordinates"""
+        """Set the location of the rotator in maidenhead coordinates"""
         if len(loc) != 6:
             raise K3NGValueException("Invalid location length")
 
@@ -482,32 +495,17 @@ class K3NG:
         if "Parking" not in ret[0]:
             raise K3NGException("Not parking")
 
-    def get_autopark(self) -> int:
-        """Determine if the rotator is in autopark or not"""
-        ret = self.query("\\Y")
-        if "Autopark is off" in ret[0]:
-            return 0
+    def set_park_location(
+        self, az: Optional[int] = None, el: Optional[int] = None
+    ) -> None:
+        """
+        Set the park location to the given location
+        Pass no arguments to set to current location
+        """
+        if az is None or el is None:
+            az = int(self.get_azimuth())
+            el = int(self.get_elevation())
 
-        return int(ret[0].split()[4])
-
-    # WARNING: autopark updates itself every few seconds.
-    # ADC drift may cause the rotator to slightly adjust itself between updates,
-    #   meaning this parked in location (mostly), but not in lack of motion.
-    def set_autopark(self, duration: int) -> None:
-        """Set the state of the autopark"""
-        # set to 0 for disable
-        # duration in mins
-        if duration == 0:
-            ret = self.query("\\Y0")
-            if "off" not in ret[0]:
-                raise K3NGException(f"Autopark not set ({ret[0]})")
-        else:
-            ret = self.query(f"\\Y {duration:04d}")
-            if f"{duration} minute" not in ret[0]:
-                raise K3NGException(f"Autopark not set ({ret[0]})")
-
-    def set_park_location(self, az: int, el: int) -> None:
-        """Set the park location to the current location"""
         ret = self.query(f"\\PA{az:03}")
         if str(az) not in ret[0]:
             raise K3NGException("Azimuth park not set")
@@ -517,10 +515,36 @@ class K3NG:
             raise K3NGException("Elevation park not set")
 
     def get_park_location(self) -> tuple[int, int]:
-        """Set the park location to the current location"""
+        """Get the park location az/el"""
         ret = self.query("\\PA")
         ret_split = ret[0].split(" ")
         return (int(ret_split[2]), int(ret_split[4]))
+
+    def get_autopark(self) -> int:
+        """Determine if the rotator is in autopark or not"""
+        ret = self.query("\\Y")
+        if "Autopark is off" in ret[0]:
+            return 0
+
+        return int(ret[0].split()[4])
+
+    def set_autopark(self, duration: int) -> None:
+        """
+        Set the state of the autopark (time after last movement to park)
+        Duration is specified in minutes, set to zero to disable
+
+        WARNING: autopark updates itself every few seconds.
+        ADC drift may cause the rotator to slightly adjust itself between updates,
+            meaning this parked in location (mostly), but not in lack of motion.
+        """
+        if duration == 0:
+            ret = self.query("\\Y0")
+            if "off" not in ret[0]:
+                raise K3NGException(f"Autopark not set ({ret[0]})")
+        else:
+            ret = self.query(f"\\Y {duration:04d}")
+            if f"{duration} minute" not in ret[0]:
+                raise K3NGException(f"Autopark not set ({ret[0]})")
 
     def load_tle(self, sat: Satellite) -> None:
         """Load a TLE from internet into the K3NG rotator controller"""
