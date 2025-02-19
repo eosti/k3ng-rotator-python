@@ -1,3 +1,3 @@
-from .k3ng import K3NG, TLE, K3NGService, Satellite
+from .k3ng import LocalK3NG, RotctlK3NG, TLE, K3NGService, Satellite
 
-__all__ = ["TLE", "Satellite", "K3NG", "K3NGService"]
+__all__ = ["TLE", "Satellite", "LocalK3NG", "RotctlK3NG", "K3NGService"]

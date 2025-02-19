@@ -6,10 +6,12 @@ import os
 import re
 import sys
 import time
+import socket
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import List, Optional
+from abc import ABC, abstractmethod
 
 import requests
 import rpyc  # type: ignore
@@ -232,85 +234,30 @@ class TrackingStatus:
         return mins
 
 
-class K3NG:
+class K3NG(ABC):
     """Class for controlling K3NG over serial"""
 
     # pylint: disable=too-many-public-methods
 
-    # TODO: add pass_active check
-    def __init__(
-        self, ser_port: str, send_delay: float = 0.03, recv_delay: float = 0.00
-    ) -> None:
-        self.send_delay = send_delay
-        self.recv_delay = recv_delay
-
-        # Ensure we have r/w on device
-        self.port = Path(ser_port)
-        if not self.port.exists():
-            raise FileNotFoundError(self.port)
-
-        if not os.access(
-            self.port,
-            os.R_OK | os.W_OK,
-            effective_ids=(os.access in os.supports_effective_ids),
-        ):
-            if os.geteuid() != 0:
-                logger.critical(
-                    "Unable to acquire read/write permissions on %s.\n"
-                    + "Please change permissions, or run this script as superuser.",
-                    self.port,
-                )
-                sys.exit(1)
-
-        self.ser = serial.Serial(ser_port, 9600, timeout=1, inter_byte_timeout=0.5)
-        self.flush()
-
-        # This is just a dummy command to "prime" the connection
-        # IDK why it's needed but the extended commands won't work otherwise
-        ret = self.query("\\-")
-        if not ret:
-            raise K3NGException("Unable to communicate with rotator")
-
-    #  ╭──────────────────────────────────────────────────────────╮
-    #  │                     General Commands                     │
-    #  ╰──────────────────────────────────────────────────────────╯
-
+    @abstractmethod
     def read(self) -> list[str]:
-        """Read all pending lines in serial buffer"""
-        response = []
-        line = ""
+        """Read all pending lines"""
+        pass
 
-        while self.ser.in_waiting > 0:
-            time.sleep(self.recv_delay)
-            ch = self.ser.read()
-            ch_decoded = ch.decode("utf-8")
-            if ch_decoded in ("\r", "\n"):
-                response.append(line)
-                line = ""
-            else:
-                line += ch_decoded
-
-        response = list(filter(None, response))
-
-        logger.debug("RX: %s", str(response))
-        return response
-
+    @abstractmethod
     def write(self, cmd: str) -> None:
         """Send a command"""
-        logger.debug("TX: %s", cmd)
-        for _ in cmd[0]:
-            time.sleep(self.send_delay)
-            self.ser.write(cmd.encode())
-        time.sleep(self.send_delay)
-        self.ser.write(("\r").encode())
-        time.sleep(0.2)
-        self.ser.readline()
+        pass
 
+    @abstractmethod
+    def flush(self) -> None:
+        """Flush input buffer"""
+        pass
+
+    @abstractmethod
     def query(self, cmd) -> list[str]:
         """Send a command and get the response"""
-        self.write(cmd)
-        time.sleep(0.2)
-        return self.read()
+        pass
 
     def query_extended(self, cmd) -> str:
         """Send an extended command and parse the response"""
@@ -335,12 +282,6 @@ class K3NG:
             raise K3NGException(f"Invalid response: {resp}")
 
         return resp[6:]
-
-    def flush(self) -> None:
-        """Flush the input buffer"""
-        self.write("\r")
-        self.ser.flush()
-        self.ser.reset_input_buffer()
 
     #  ╭──────────────────────────────────────────────────────────╮
     #  │                       Basic Config                       │
@@ -673,6 +614,124 @@ class K3NG:
     def get_raw_voltage(self, pin: int, vref: float = 5.0, numbits: int = 10) -> float:
         """Returns the raw voltage of a valid analog pin"""
         return self.get_raw_analog(pin) * vref / (2**numbits)
+
+
+class LocalK3NG(K3NG):
+    """Control K3NG over a local serial connection"""
+
+    def __init__(
+        self, ser_port: str, send_delay: float = 0.03, recv_delay: float = 0.00
+    ) -> None:
+        self.send_delay = send_delay
+        self.recv_delay = recv_delay
+
+        # Ensure we have r/w on device
+        self.port = Path(ser_port)
+        if not self.port.exists():
+            raise FileNotFoundError(self.port)
+
+        if not os.access(
+            self.port,
+            os.R_OK | os.W_OK,
+            effective_ids=(os.access in os.supports_effective_ids),
+        ):
+            if os.geteuid() != 0:
+                logger.critical(
+                    "Unable to acquire read/write permissions on %s.\n"
+                    + "Please change permissions, or run this script as superuser.",
+                    self.port,
+                )
+                sys.exit(1)
+
+        self.ser = serial.Serial(ser_port, 9600, timeout=1, inter_byte_timeout=0.5)
+        self.flush()
+
+        # This is just a dummy command to "prime" the connection
+        # IDK why it's needed but the extended commands won't work otherwise
+        ret = self.query("\\-")
+        if not ret:
+            raise K3NGException("Unable to communicate with rotator")
+
+    def read(self) -> list[str]:
+        """Read all pending lines in serial buffer"""
+        response = []
+        line = ""
+
+        while self.ser.in_waiting > 0:
+            time.sleep(self.recv_delay)
+            ch = self.ser.read()
+            ch_decoded = ch.decode("utf-8")
+            if ch_decoded in ("\r", "\n"):
+                response.append(line)
+                line = ""
+            else:
+                line += ch_decoded
+
+        response = list(filter(None, response))
+
+        logger.debug("RX: %s", str(response))
+        return response
+
+    def write(self, cmd: str) -> None:
+        """Send a command"""
+        logger.debug("TX: %s", cmd)
+        for _ in cmd[0]:
+            time.sleep(self.send_delay)
+            self.ser.write(cmd.encode())
+        time.sleep(self.send_delay)
+        self.ser.write(("\r").encode())
+        time.sleep(0.2)
+        self.ser.readline()
+
+    def query(self, cmd) -> list[str]:
+        """Send a command and get the response"""
+        self.write(cmd)
+        time.sleep(0.2)
+        return self.read()
+
+    def flush(self) -> None:
+        """Flush the input buffer"""
+        self.write("\r")
+        self.ser.flush()
+        self.ser.reset_input_buffer()
+
+
+class RotctlK3NG(K3NG):
+    def __init__(self, host: str, port: int = 4533):
+        self.host = host
+        self.port = port
+
+    def read(self) -> list[str]:
+        response: list[str]
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            socketfile = s.makefile("rbw", buffering=0)
+            response = socketfile.read().splitlines()
+
+        logger.debug("RX: %s", str(response))
+        return response
+
+    def write(self, cmd: str) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            socketfile = s.makefile("rbw", buffering=0)
+            socketfile.write(f"w{cmd}\r".encode())
+        logger.debug("TX: %s", cmd)
+
+    def query(self, cmd: str) -> list[str]:
+        response: list[str]
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            socketfile = s.makefile("rbw", buffering=0)
+            socketfile.write(f"w{cmd}\r".encode())
+            logger.debug("TX: %s", cmd)
+            time.sleep(0.2)
+            response = socketfile.read().splitlines()
+
+        logger.debug("RX: %s", str(response))
+
+    def flush(self) -> None:
+        pass
 
 
 @exposify
