@@ -1,15 +1,18 @@
-[tool.poetry]
+[project]
 name = "k3ng-rotator-python"
 version = "1.1.1"
 description = "Control a K3NG rotator over serial"
-authors = ["Reid Sox-Harris <reid@soxharris.com>"]
-packages = [{include = "k3ng"}]
+authors = [{name = "Reid Sox-Harris", email="reid@soxharris.com>"}]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pyserial = "^3.5"
-requests = "^2.31.0"
-rpyc = "^6.0.0"
+requires-python = ">=3.10"
+dependencies = ["pyserial (>=3.5,<4.0)", "requests (>=2.31.0,<3.0.0)", "rpyc (>=6.0.0,<7.0)"]
+
+[project.urls]
+repository = "https://github.com/eosti/k3ng-rotator-python"
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+packages = [{include = "k3ng"}]
 
 [tool.poetry.group.dev]
 optional = true
@@ -22,10 +25,20 @@ flake8 = "^6.1.0"
 pylint = "^3.2.3"
 types-requests = "^2.31.0"
 types-pyserial = "^3.5.0.8"
+
 sphinx = "^8.1.3"
 sphinx-rtd-theme = "^3.0.2"
 sphinx-pyproject = "^0.3.0"
+sphinx-autobuild = "^2024.10.3"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.sphinx-pyproject]
+github_username = "eosti"
+github_repository = "k3ng-rotator-python"
+author = "Reid Sox-Harris"
+project = "k3ng-rotator-python"
+copyright = "%Y Reid Sox-Harris"
+language = "en"
