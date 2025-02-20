@@ -16,8 +16,8 @@ def test_function(ser_port: str) -> None:
     input("Moving RIGHT. Enter to continue.")
 
     rot.stop()
-    rot.set_elevation(0)
-    rot.set_azimuth(0)
+    rot.elevation = 0
+    rot.azimuth = 0
 
     input("Going home (0, 0). Enter to continue")
     print("Done!")

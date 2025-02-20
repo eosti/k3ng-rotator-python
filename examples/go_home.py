@@ -7,11 +7,11 @@ from k3ng import LocalK3NG
 def calibrate_rotator(ser_port: str) -> None:
     rot = LocalK3NG(ser_port)
 
-    rot.get_azimuth()
-    rot.get_elevation()
+    print(rot.azimuth)
+    print(rot.elevation)
 
-    rot.set_azimuth(0)
-    rot.set_elevation(0)
+    rot.azimuth = 0
+    rot.elevation = 0
 
 
 def main():
