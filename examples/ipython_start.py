@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 from IPython import get_ipython  # type: ignore
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 parser = ArgumentParser(
     prog="ipython_start",
@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 
 args = parser.parse_args()
 
-rot = K3NG(args.port)
+rot = LocalK3NG(args.port)
 
 try:
     ipython = get_ipython()

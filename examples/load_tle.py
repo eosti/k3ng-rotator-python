@@ -1,11 +1,11 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG, Satellite
+from k3ng import LocalK3NG, Satellite
 
 
 def program_tle(sat_id: int, ser_port: str, track: bool) -> None:
-    rot = K3NG(ser_port)
+    rot = LocalK3NG(ser_port)
 
     sat = Satellite(sat_id)
     rot.load_tle(sat)

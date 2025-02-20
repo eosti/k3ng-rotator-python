@@ -1,11 +1,11 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 
 def test_function(ser_port: str) -> None:
-    rot = K3NG(ser_port)
+    rot = LocalK3NG(ser_port)
     input("Set rotator to fully down, fully left. Enter to continue")
 
     rot.up()

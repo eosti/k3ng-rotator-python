@@ -1,11 +1,11 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 
 def program_tle_from_file(tle_file: str, ser_port: str, track: bool) -> None:
-    rot = K3NG(ser_port)
+    rot = LocalK3NG(ser_port)
 
     rot.set_time()
     sat = rot.load_tle_from_file(tle_file)

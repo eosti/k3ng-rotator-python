@@ -1,10 +1,10 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 
-def toggle_tracking(rot: K3NG) -> None:
+def toggle_tracking(rot: LocalK3NG) -> None:
     rot.get_trackable()
     if rot.get_tracking_status().is_tracking:
         rot.disable_tracking()
@@ -32,7 +32,7 @@ def main():
 
     args = parser.parse_args()
 
-    rot = K3NG(args.port)
+    rot = LocalK3NG(args.port)
 
     if args.state == "on":
         rot.enable_tracking()
