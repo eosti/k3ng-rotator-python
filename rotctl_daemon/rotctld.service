@@ -1,0 +1,13 @@
+# Source for a lot of this: https://github.com/torfsen/python-systemd-tutorial
+
+[Unit]
+Description=rotctld service for K3NG rotator
+
+[Service]
+ExecStart=rotctld -m 603 -r /dev/ttyRotator -s 9600 -t 4533
+Restart=on-failure
+Type=simple
+User=k3ng_rotator
+
+[Install]
+WantedBy=default.target
