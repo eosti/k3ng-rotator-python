@@ -1,11 +1,11 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 
 def calibrate_rotator(ser_port: str) -> None:
-    rot = K3NG(ser_port)
+    rot = LocalK3NG(ser_port)
 
     rot.get_azimuth()
     rot.get_elevation()

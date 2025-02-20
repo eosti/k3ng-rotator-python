@@ -4,8 +4,10 @@ import datetime
 import logging
 import os
 import re
+import socket
 import sys
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
@@ -232,98 +234,37 @@ class TrackingStatus:
         return mins
 
 
-class K3NG:
+class K3NG(ABC):
     """Class for controlling K3NG over serial"""
 
     # pylint: disable=too-many-public-methods
 
-    # TODO: add pass_active check
-    def __init__(
-        self, ser_port: str, send_delay: float = 0.03, recv_delay: float = 0.00
-    ) -> None:
-        self.send_delay = send_delay
-        self.recv_delay = recv_delay
-
-        # Ensure we have r/w on device
-        self.port = Path(ser_port)
-        if not self.port.exists():
-            raise FileNotFoundError(self.port)
-
-        if not os.access(
-            self.port,
-            os.R_OK | os.W_OK,
-            effective_ids=(os.access in os.supports_effective_ids),
-        ):
-            if os.geteuid() != 0:
-                logger.critical(
-                    "Unable to acquire read/write permissions on %s.\n"
-                    + "Please change permissions, or run this script as superuser.",
-                    self.port,
-                )
-                sys.exit(1)
-
-        self.ser = serial.Serial(ser_port, 9600, timeout=1, inter_byte_timeout=0.5)
-        self.flush()
-
-        # This is just a dummy command to "prime" the connection
-        # IDK why it's needed but the extended commands won't work otherwise
-        ret = self.query("\\-")
-        if not ret:
-            raise K3NGException("Unable to communicate with rotator")
-
-    #  ╭──────────────────────────────────────────────────────────╮
-    #  │                     General Commands                     │
-    #  ╰──────────────────────────────────────────────────────────╯
-
-    def read(self) -> list[str]:
-        """Read all pending lines in serial buffer"""
-        response = []
-        line = ""
-
-        while self.ser.in_waiting > 0:
-            time.sleep(self.recv_delay)
-            ch = self.ser.read()
-            ch_decoded = ch.decode("utf-8")
-            if ch_decoded in ("\r", "\n"):
-                response.append(line)
-                line = ""
-            else:
-                line += ch_decoded
-
-        response = list(filter(None, response))
-
-        logger.debug("RX: %s", str(response))
-        return response
-
+    @abstractmethod
     def write(self, cmd: str) -> None:
         """Send a command"""
-        logger.debug("TX: %s", cmd)
-        for _ in cmd[0]:
-            time.sleep(self.send_delay)
-            self.ser.write(cmd.encode())
-        time.sleep(self.send_delay)
-        self.ser.write(("\r").encode())
-        time.sleep(0.2)
-        self.ser.readline()
+        pass
 
+    @abstractmethod
+    def flush(self) -> None:
+        """Flush receive buffer"""
+        pass
+
+    @abstractmethod
     def query(self, cmd) -> list[str]:
-        """Send a command and get the response"""
-        self.write(cmd)
-        time.sleep(0.2)
-        return self.read()
+        """
+        Send a command and get the response.
+
+        Automatically trims new prompts and command echoes.
+        """
+        pass
 
     def query_extended(self, cmd) -> str:
         """Send an extended command and parse the response"""
-        time.sleep(0.2)
         if len(cmd) < 2 or "\\?" in cmd:
             raise K3NGValueException("Invalid extended command")
 
-        self.write("\\?" + cmd)
-
-        time.sleep(0.2)
-
         try:
-            resp = self.read()[0]
+            resp = self.query("\\?" + cmd)[0]
         except IndexError as ex:
             raise K3NGException("No response from rotator") from ex
 
@@ -335,12 +276,6 @@ class K3NG:
             raise K3NGException(f"Invalid response: {resp}")
 
         return resp[6:]
-
-    def flush(self) -> None:
-        """Flush the input buffer"""
-        self.write("\r")
-        self.ser.flush()
-        self.ser.reset_input_buffer()
 
     #  ╭──────────────────────────────────────────────────────────╮
     #  │                       Basic Config                       │
@@ -384,21 +319,20 @@ class K3NG:
         if abs(ret_time - current_time) > datetime.timedelta(seconds=10):
             logger.warning("Time difference greater than 10 seconds!")
 
-    def get_loc(self) -> str:
+    def get_location(self) -> str:
         """Get the stored location from the rotator"""
         # TODO: make this be able to return coords or grid
         return self.query_extended("RG")[0]
 
-    def set_loc(self, loc) -> None:
+    def set_location(self, loc) -> None:
         """Set the location of the rotator in maidenhead coordinates"""
         if len(loc) != 6:
             raise K3NGValueException("Invalid location length")
 
         self.query("\\G" + loc)
-
         # TODO: check retval
 
-    def save_to_eeprom(self) -> None:
+    def store_to_eeprom(self) -> None:
         """Store the current configuration to EEPROM"""
         self.write("\\Q")
         # This command restarts, so we reprime the buffer
@@ -410,22 +344,26 @@ class K3NG:
     #  │                         Movement                         │
     #  ╰──────────────────────────────────────────────────────────╯
 
-    def get_elevation(self) -> float:
+    @property
+    def elevation(self) -> float:
         """Get the current elevation"""
         ret = self.query_extended("EL")
         # replace is to accomodate for a quirk in reporting at EL=0
         return float(ret.replace("0-0.", "00.").strip("0"))
 
-    def set_elevation(self, el: float) -> None:
+    @elevation.setter
+    def elevation(self, el: float) -> None:
         """Command the rotator to a given elevation"""
         self.query_extended(f"GE{el:05.2f}")
 
-    def get_azimuth(self) -> float:
+    @property
+    def azimuth(self) -> float:
         """Get the current azimuth"""
         ret = self.query_extended("AZ")
         return float(ret.strip("0"))
 
-    def set_azimuth(self, az: float) -> None:
+    @azimuth.setter
+    def azimuth(self, az: float) -> None:
         """Command the rotator to a given azimuth"""
         self.query_extended(f"GA{az:05.2f}")
 
@@ -503,8 +441,8 @@ class K3NG:
         Pass no arguments to set to current location
         """
         if az is None or el is None:
-            az = int(self.get_azimuth())
-            el = int(self.get_elevation())
+            az = int(self.azimuth)
+            el = int(self.elevation)
 
         ret = self.query(f"\\PA{az:03}")
         if str(az) not in ret[0]:
@@ -553,9 +491,7 @@ class K3NG:
         self.write(sat.tle.title)
         self.write(sat.tle.line_one)
         self.write(sat.tle.line_two)
-        self.write("\r")
-        time.sleep(0.5)
-        ret = self.read()
+        ret = self.query("\r")
 
         if "corrupt" in ret[0]:
             logger.critical("TLE corrupted on write")
@@ -675,8 +611,118 @@ class K3NG:
         return self.get_raw_analog(pin) * vref / (2**numbits)
 
 
+class LocalK3NG(K3NG):
+    """Control K3NG over a local serial connection"""
+
+    def __init__(
+        self, ser_port: str, send_delay: float = 0.03, recv_delay: float = 0.00
+    ) -> None:
+        self.send_delay = send_delay
+        self.recv_delay = recv_delay
+
+        # Ensure we have r/w on device
+        self.port = Path(ser_port)
+        if not self.port.exists():
+            raise FileNotFoundError(self.port)
+
+        if not os.access(
+            self.port,
+            os.R_OK | os.W_OK,
+            effective_ids=(os.access in os.supports_effective_ids),
+        ):
+            if os.geteuid() != 0:
+                logger.critical(
+                    "Unable to acquire read/write permissions on %s.\n"
+                    + "Please change permissions, or run this script as superuser.",
+                    self.port,
+                )
+                sys.exit(1)
+
+        self.ser = serial.Serial(ser_port, 9600, timeout=1, inter_byte_timeout=0.5)
+        self.flush()
+
+        # This is just a dummy command to "prime" the connection
+        # IDK why it's needed but the extended commands won't work otherwise
+        ret = self.query("\\-")
+        if not ret:
+            raise K3NGException("Unable to communicate with rotator")
+
+    def read(self) -> list[str]:
+        """Read all pending lines in serial buffer"""
+        response = []
+        line = ""
+
+        while self.ser.in_waiting > 0:
+            time.sleep(self.recv_delay)
+            ch = self.ser.read()
+            ch_decoded = ch.decode("utf-8")
+            if ch_decoded in ("\r", "\n"):
+                response.append(line)
+                line = ""
+            else:
+                line += ch_decoded
+
+        response = list(filter(None, response))
+
+        logger.debug("RX: %s", str(response))
+        return response
+
+    def write(self, cmd: str) -> None:
+        """Send a command"""
+        logger.debug("TX: %s", cmd)
+        for _ in cmd[0]:
+            time.sleep(self.send_delay)
+            self.ser.write(cmd.encode())
+        time.sleep(self.send_delay)
+        self.ser.write(("\r").encode())
+        time.sleep(0.2)
+        self.ser.readline()
+
+    def query(self, cmd) -> list[str]:
+        """Send a command and get the response"""
+        self.write(cmd)
+        time.sleep(0.2)
+        return self.read()
+
+    def flush(self) -> None:
+        """Flush the input buffer"""
+        self.write("\r")
+        self.ser.flush()
+        self.ser.reset_input_buffer()
+
+
+class RotctlK3NG(K3NG):
+    def __init__(self, host: str, port: int = 4533):
+        self.host = host
+        self.port = port
+
+    def write(self, cmd: str) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            s.sendall(f"w{cmd}\n".encode())
+        logger.debug("TX: %s", cmd)
+
+    def query(self, cmd: str) -> list[str]:
+        response: list[str]
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            s.sendall(f"w{cmd}\n".encode())
+            logger.debug("TX: %s", cmd)
+            raw_resp = s.recv(1024).decode()
+
+        response = [
+            s for s in raw_resp.splitlines() if s != "" and s != "?>" and s != cmd
+        ]
+        logger.debug("RX: %s", str(response))
+        return response
+
+    def flush(self) -> None:
+        """Can't flush a TCP stream"""
+        pass
+
+
 @exposify
-class ExposedK3NG(K3NG):
+class ExposedK3NG(LocalK3NG):
     """Exposed K3NG class for RPC"""
 
 

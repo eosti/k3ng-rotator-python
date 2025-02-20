@@ -1,11 +1,11 @@
 import logging
 from argparse import ArgumentParser
 
-from k3ng import K3NG
+from k3ng import LocalK3NG
 
 
 def default_config(ser_port: str, location: str) -> None:
-    rot = K3NG(ser_port)
+    rot = LocalK3NG(ser_port)
     rot.set_loc(location)
     rot.set_time()
 
