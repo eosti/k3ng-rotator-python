@@ -4,14 +4,14 @@ import datetime
 import logging
 import os
 import re
+import socket
 import sys
 import time
-import socket
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import List, Optional
-from abc import ABC, abstractmethod
 
 import requests
 import rpyc  # type: ignore
@@ -246,7 +246,7 @@ class K3NG(ABC):
 
     @abstractmethod
     def flush(self) -> None:
-        """Flush input buffer"""
+        """Flush receive buffer"""
         pass
 
     @abstractmethod
@@ -319,21 +319,20 @@ class K3NG(ABC):
         if abs(ret_time - current_time) > datetime.timedelta(seconds=10):
             logger.warning("Time difference greater than 10 seconds!")
 
-    def get_loc(self) -> str:
+    def get_location(self) -> str:
         """Get the stored location from the rotator"""
         # TODO: make this be able to return coords or grid
         return self.query_extended("RG")[0]
 
-    def set_loc(self, loc) -> None:
+    def set_location(self, loc) -> None:
         """Set the location of the rotator in maidenhead coordinates"""
         if len(loc) != 6:
             raise K3NGValueException("Invalid location length")
 
         self.query("\\G" + loc)
-
         # TODO: check retval
 
-    def save_to_eeprom(self) -> None:
+    def store_to_eeprom(self) -> None:
         """Store the current configuration to EEPROM"""
         self.write("\\Q")
         # This command restarts, so we reprime the buffer
@@ -345,22 +344,26 @@ class K3NG(ABC):
     #  │                         Movement                         │
     #  ╰──────────────────────────────────────────────────────────╯
 
-    def get_elevation(self) -> float:
+    @property
+    def elevation(self) -> float:
         """Get the current elevation"""
         ret = self.query_extended("EL")
         # replace is to accomodate for a quirk in reporting at EL=0
         return float(ret.replace("0-0.", "00.").strip("0"))
 
-    def set_elevation(self, el: float) -> None:
+    @elevation.setter
+    def elevation(self, el: float) -> None:
         """Command the rotator to a given elevation"""
         self.query_extended(f"GE{el:05.2f}")
 
-    def get_azimuth(self) -> float:
+    @property
+    def azimuth(self) -> float:
         """Get the current azimuth"""
         ret = self.query_extended("AZ")
         return float(ret.strip("0"))
 
-    def set_azimuth(self, az: float) -> None:
+    @azimuth.setter
+    def azimuth(self, az: float) -> None:
         """Command the rotator to a given azimuth"""
         self.query_extended(f"GA{az:05.2f}")
 
@@ -438,8 +441,8 @@ class K3NG(ABC):
         Pass no arguments to set to current location
         """
         if az is None or el is None:
-            az = int(self.get_azimuth())
-            el = int(self.get_elevation())
+            az = int(self.azimuth)
+            el = int(self.elevation)
 
         ret = self.query(f"\\PA{az:03}")
         if str(az) not in ret[0]:
@@ -707,16 +710,19 @@ class RotctlK3NG(K3NG):
             logger.debug("TX: %s", cmd)
             raw_resp = s.recv(1024).decode()
 
-        response = [s for s in raw_resp.splitlines() if s != "" and s != "?>" and s != cmd]
+        response = [
+            s for s in raw_resp.splitlines() if s != "" and s != "?>" and s != cmd
+        ]
         logger.debug("RX: %s", str(response))
-        return response[1:]     # First text returned is the command echo
+        return response
 
     def flush(self) -> None:
+        """Can't flush a TCP stream"""
         pass
 
 
 @exposify
-class ExposedK3NG(K3NG):
+class ExposedK3NG(LocalK3NG):
     """Exposed K3NG class for RPC"""
 
 
