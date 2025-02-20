@@ -240,11 +240,6 @@ class K3NG(ABC):
     # pylint: disable=too-many-public-methods
 
     @abstractmethod
-    def read(self) -> list[str]:
-        """Read all pending lines"""
-        pass
-
-    @abstractmethod
     def write(self, cmd: str) -> None:
         """Send a command"""
         pass
@@ -256,21 +251,20 @@ class K3NG(ABC):
 
     @abstractmethod
     def query(self, cmd) -> list[str]:
-        """Send a command and get the response"""
+        """
+        Send a command and get the response.
+
+        Automatically trims new prompts and command echoes.
+        """
         pass
 
     def query_extended(self, cmd) -> str:
         """Send an extended command and parse the response"""
-        time.sleep(0.2)
         if len(cmd) < 2 or "\\?" in cmd:
             raise K3NGValueException("Invalid extended command")
 
-        self.write("\\?" + cmd)
-
-        time.sleep(0.2)
-
         try:
-            resp = self.read()[0]
+            resp = self.query("\\?" + cmd)[0]
         except IndexError as ex:
             raise K3NGException("No response from rotator") from ex
 
@@ -494,9 +488,7 @@ class K3NG(ABC):
         self.write(sat.tle.title)
         self.write(sat.tle.line_one)
         self.write(sat.tle.line_two)
-        self.write("\r")
-        time.sleep(0.5)
-        ret = self.read()
+        ret = self.query("\r")
 
         if "corrupt" in ret[0]:
             logger.critical("TLE corrupted on write")
@@ -701,34 +693,23 @@ class RotctlK3NG(K3NG):
         self.host = host
         self.port = port
 
-    def read(self) -> list[str]:
-        response: list[str]
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.host, self.port))
-            socketfile = s.makefile("rbw", buffering=0)
-            response = socketfile.read().splitlines()
-
-        logger.debug("RX: %s", str(response))
-        return response
-
     def write(self, cmd: str) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.host, self.port))
-            socketfile = s.makefile("rbw", buffering=0)
-            socketfile.write(f"w{cmd}\r".encode())
+            s.sendall(f"w{cmd}\n".encode())
         logger.debug("TX: %s", cmd)
 
     def query(self, cmd: str) -> list[str]:
         response: list[str]
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.host, self.port))
-            socketfile = s.makefile("rbw", buffering=0)
-            socketfile.write(f"w{cmd}\r".encode())
+            s.sendall(f"w{cmd}\n".encode())
             logger.debug("TX: %s", cmd)
-            time.sleep(0.2)
-            response = socketfile.read().splitlines()
+            raw_resp = s.recv(1024).decode()
 
+        response = [s for s in raw_resp.splitlines() if s != "" and s != "?>" and s != cmd]
         logger.debug("RX: %s", str(response))
+        return response[1:]     # First text returned is the command echo
 
     def flush(self) -> None:
         pass
